@@ -26,14 +26,14 @@ jobs:
           tar --zstd -xvf sdk.tar.zst
           mv immortalwrt-sdk-* sdk
 
-      - name: Build Kernel, Modules, libx264 and FFmpeg
+      - name: Build Kernel Modules and Packages
         run: |
           cd sdk
           ./scripts/feeds update -a
           ./scripts/feeds install libx264
           ./scripts/feeds install ffmpeg
 
-          # Генерируем полный конфиг для сборки ядра и модулей
+          # Генерируем конфиг для сборки модулей и пакетов
           cat > .config << 'EOF'
           CONFIG_TARGET_armsr=y
           CONFIG_TARGET_armsr_armv8=y
@@ -77,19 +77,15 @@ jobs:
 
           make defconfig
 
-          # 1. Собираем ядро и модули (этот шаг критически важен)
-          echo "=== Building Kernel and Modules ==="
-          make kernel_menuconfig
-          make modules -j$(nproc)
-          # Копируем собранные модули в общую папку
-          mkdir -p bin/targets/armsr/armv8/packages/
-          cp -r staging_dir/target-aarch64_generic_musl/root-armsr/lib/modules/* bin/targets/armsr/armv8/packages/ 2>/dev/null || true
+          # Собираем модули ядра через стандартную систему пакетов
+          echo "=== Building kernel modules ==="
+          make package/feeds/packages/linux/compile V=s -j$(nproc)
 
-          # 2. Собираем libx264
+          # Собираем libx264
           echo "=== Building libx264 ==="
           make package/feeds/packages/libx264/compile V=s -j$(nproc)
 
-          # 3. Собираем FFmpeg
+          # Собираем FFmpeg
           echo "=== Building FFmpeg ==="
           make package/feeds/packages/ffmpeg/compile V=s -j$(nproc)
 
@@ -100,11 +96,9 @@ jobs:
           echo "=== Searching for FFmpeg ==="
           find sdk/bin/ -name "*ffmpeg*" -type f
           echo "=== Searching for kmod packages ==="
-          find sdk/bin/ -name "kmod-video-meson*" -type f
+          find sdk/bin/ -name "kmod-*" -type f
           echo "=== All built packages in the known path ==="
           ls -la /home/runner/work/immortalwrt/immortalwrt/sdk/bin/packages/aarch64_generic/packages/ || echo "Directory not found"
-          echo "=== All built packages in target path ==="
-          ls -la /home/runner/work/immortalwrt/immortalwrt/sdk/bin/targets/armsr/armv8/packages/ || echo "Directory not found"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4.6.0
