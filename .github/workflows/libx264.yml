@@ -21,18 +21,18 @@ jobs:
 
       - name: Download SDK
         run: |
-          # Скачиваем SDK для armsr/armv8 (snapshot)
           SDK_URL="https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/immortalwrt-sdk-armsr-armv8_gcc-14.4.0_musl.Linux-x86_64.tar.zst"
           wget -O sdk.tar.zst $SDK_URL
           tar --zstd -xvf sdk.tar.zst
           mv immortalwrt-sdk-* sdk
 
-      - name: Build FFmpeg Package
+      - name: Build libx264 and ffmpeg
         run: |
           cd sdk
           # Обновляем фиды
           ./scripts/feeds update -a
-          # Устанавливаем только нужные пакеты
+          
+          # Устанавливаем все необходимые пакеты
           ./scripts/feeds install libx264
           ./scripts/feeds install ffmpeg
           
@@ -53,10 +53,15 @@ jobs:
           
           make defconfig
           
-          # Сначала собираем libx264 (обязательно!)
+          # Сначала собираем libx264
+          echo "=== Building libx264 ==="
           make package/feeds/packages/libx264/compile V=s -j$(nproc)
           
-          # Затем собираем FFmpeg
+          # Проверяем, что libx264 собралась
+          ls -la staging_dir/target-aarch64_generic_musl/root-armsr/usr/lib/libx264* || true
+          
+          # Затем собираем ffmpeg
+          echo "=== Building ffmpeg ==="
           make package/feeds/packages/ffmpeg/compile V=s -j$(nproc)
 
       - name: Upload Artifacts
