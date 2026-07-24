@@ -31,28 +31,33 @@ jobs:
 
     - name: Generate Configuration
       run: |
+        # Базовая архитектура Arm SystemReady / ARMv8 / AArch64
         echo "CONFIG_TARGET_armsr=y" > .config
         echo "CONFIG_TARGET_armsr_armv8=y" >> .config
         echo "CONFIG_TARGET_armsr_armv8_Default=y" >> .config
         
-        # Разрешаем несвободное ПО и патенты
+        # Разрешаем сборку запатентованных и GPL пакетов (Критично для x264)
         echo "CONFIG_BUILD_PATENTED=y" >> .config
         
-        # Выбираем менеджер пакетов APK
+        # Задаем современный менеджер пакетов APK
         echo "CONFIG_PACKAGE_MANAGEMENT_apk=y" >> .config
         
-        # Конфигурация FFmpeg с поддержкой x264 и GPL
+        # Включаем FFmpeg и библиотеку libx264
         echo "CONFIG_PACKAGE_ffmpeg=y" >> .config
         echo "CONFIG_PACKAGE_libx264=y" >> .config
+        
+        # Выбираем кастомную сборку ffmpeg со всеми лицензиями
+        echo "CONFIG_PACKAGE_libffmpeg-custom=y" >> .config
         echo "CONFIG_FFMPEG_CUSTOM_PATENTED=y" >> .config
         echo "CONFIG_FFMPEG_CUSTOM_GPL=y" >> .config
-        echo "CONFIG_FFMPEG_CUSTOM_SELECT_libx264=y" >> .config
         
-        # Принудительно включаем кодеки H264 внутри ffmpeg
+        # Принудительно заставляем ffmpeg слинковаться с libx264 и включить h264
+        echo "CONFIG_FFMPEG_CUSTOM_SELECT_libx264=y" >> .config
         echo "CONFIG_FFMPEG_CUSTOM_DECODER_h264=y" >> .config
         echo "CONFIG_FFMPEG_CUSTOM_ENCODER_libx264=y" >> .config
-        echo "CONFIG_FFMPEG_CUSTOM_MUXER_h264=y" >> .config
         echo "CONFIG_FFMPEG_CUSTOM_DEMUXER_h264=y" >> .config
+        echo "CONFIG_FFMPEG_CUSTOM_MUXER_h264=y" >> .config
+        echo "CONFIG_FFMPEG_CUSTOM_PARSER_h264=y" >> .config
         
         make defconfig
 
@@ -63,11 +68,11 @@ jobs:
 
     - name: Compile FFmpeg Package
       run: |
-        # Запускаем сборку конкретно ffmpeg со всеми зависимостями
+        # Собираем x264 и ffmpeg с выводом логов компиляции
         make package/feeds/packages/ffmpeg/compile V=s -j$(nproc)
 
     - name: Upload Artifacts
-      if: always() # Выгрузит логи или файлы, даже если что-то пойдет не так
+      if: always() # Выгрузит артефакты в любом случае
       uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4.6.0
       with:
         name: immortalwrt-ffmpeg-packages
