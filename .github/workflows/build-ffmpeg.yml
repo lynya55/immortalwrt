@@ -1,7 +1,7 @@
 name: Build FFmpeg with libx264
 
 on:
-  workflow_dispatch: # Позволяет запускать сборку вручную кнопкой в интерфейсе GitHub
+  workflow_dispatch:
 
 jobs:
   build:
@@ -28,25 +28,16 @@ jobs:
 
     - name: Generate Configuration
       run: |
-        # Выбираем архитектуру Arm SystemReady (armsr / armv8)
         echo "CONFIG_TARGET_armsr=y" > .config
         echo "CONFIG_TARGET_armsr_armv8=y" >> .config
         echo "CONFIG_TARGET_armsr_armv8_Default=y" >> .config
-        
-        # Разрешаем запатентованные кодеки глобально
         echo "CONFIG_BUILD_PATENTED=y" >> .config
-        
-        # Включаем FFmpeg и libx264
         echo "CONFIG_PACKAGE_ffmpeg=y" >> .config
         echo "CONFIG_PACKAGE_libx264=y" >> .config
         echo "CONFIG_FFMPEG_CUSTOM_PATENTED=y" >> .config
-        echo "CONFIG_FFMPEG_CUSTOM_GPL=y" >> >> .config
+        echo "CONFIG_FFMPEG_CUSTOM_GPL=y" >> .config
         echo "CONFIG_FFMPEG_CUSTOM_SELECT_libx264=y" >> .config
-        
-        # Пакетный менеджер APK
         echo "CONFIG_PACKAGE_MANAGEMENT_apk=y" >> .config
-        
-        # Применяем конфигурацию и дописываем дефолты
         make defconfig
 
     - name: Compile Toolchain and Tools
@@ -59,7 +50,7 @@ jobs:
         make package/feeds/packages/ffmpeg/compile V=s -j$(nproc)
 
     - name: Upload Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@65c4c4a1ddee21e5f816efb13529f0a061144038
       with:
         name: immortalwrt-ffmpeg-packages
         path: bin/targets/armsr/armv8/packages/*.apk
