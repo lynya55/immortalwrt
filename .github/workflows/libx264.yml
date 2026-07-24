@@ -29,14 +29,10 @@ jobs:
       - name: Build libx264 and ffmpeg
         run: |
           cd sdk
-          # Обновляем фиды
           ./scripts/feeds update -a
-          
-          # Устанавливаем все необходимые пакеты
           ./scripts/feeds install libx264
           ./scripts/feeds install ffmpeg
           
-          # Генерируем конфигурацию
           cat > .config << 'EOF'
           CONFIG_TARGET_armsr=y
           CONFIG_TARGET_armsr_armv8=y
@@ -52,23 +48,25 @@ jobs:
           EOF
           
           make defconfig
-          
-          # Сначала собираем libx264
           echo "=== Building libx264 ==="
           make package/feeds/packages/libx264/compile V=s -j$(nproc)
-          
-          # Проверяем, что libx264 собралась
-          ls -la staging_dir/target-aarch64_generic_musl/root-armsr/usr/lib/libx264* || true
-          
-          # Затем собираем ffmpeg
           echo "=== Building ffmpeg ==="
           make package/feeds/packages/ffmpeg/compile V=s -j$(nproc)
+
+      - name: List built packages
+        run: |
+          echo "=== Searching for libx264 ==="
+          find sdk/bin/ -name "*libx264*" -type f
+          echo "=== Searching for ffmpeg ==="
+          find sdk/bin/ -name "*ffmpeg*" -type f
+          echo "=== All built packages in target dir ==="
+          ls -la sdk/bin/targets/armsr/armv8/packages/ || echo "Directory not found"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4.6.0
         with:
           name: immortalwrt-ffmpeg-packages
           path: |
-            sdk/bin/packages/aarch64_generic/base/*.ipk
-            sdk/bin/packages/aarch64_generic/base/*.apk
+            sdk/bin/targets/armsr/armv8/packages/*.ipk
+            sdk/bin/targets/armsr/armv8/packages/*.apk
           if-no-files-found: warn
