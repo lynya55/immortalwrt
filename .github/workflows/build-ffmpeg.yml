@@ -34,13 +34,26 @@ jobs:
         echo "CONFIG_TARGET_armsr=y" > .config
         echo "CONFIG_TARGET_armsr_armv8=y" >> .config
         echo "CONFIG_TARGET_armsr_armv8_Default=y" >> .config
+        
+        # Разрешаем несвободное ПО и патенты
         echo "CONFIG_BUILD_PATENTED=y" >> .config
+        
+        # Выбираем менеджер пакетов APK
+        echo "CONFIG_PACKAGE_MANAGEMENT_apk=y" >> .config
+        
+        # Конфигурация FFmpeg с поддержкой x264 и GPL
         echo "CONFIG_PACKAGE_ffmpeg=y" >> .config
         echo "CONFIG_PACKAGE_libx264=y" >> .config
         echo "CONFIG_FFMPEG_CUSTOM_PATENTED=y" >> .config
         echo "CONFIG_FFMPEG_CUSTOM_GPL=y" >> .config
         echo "CONFIG_FFMPEG_CUSTOM_SELECT_libx264=y" >> .config
-        echo "CONFIG_PACKAGE_MANAGEMENT_apk=y" >> .config
+        
+        # Принудительно включаем кодеки H264 внутри ffmpeg
+        echo "CONFIG_FFMPEG_CUSTOM_DECODER_h264=y" >> .config
+        echo "CONFIG_FFMPEG_CUSTOM_ENCODER_libx264=y" >> .config
+        echo "CONFIG_FFMPEG_CUSTOM_MUXER_h264=y" >> .config
+        echo "CONFIG_FFMPEG_CUSTOM_DEMUXER_h264=y" >> .config
+        
         make defconfig
 
     - name: Compile Toolchain and Tools
@@ -50,10 +63,12 @@ jobs:
 
     - name: Compile FFmpeg Package
       run: |
+        # Запускаем сборку конкретно ffmpeg со всеми зависимостями
         make package/feeds/packages/ffmpeg/compile V=s -j$(nproc)
 
     - name: Upload Artifacts
+      if: always() # Выгрузит логи или файлы, даже если что-то пойдет не так
       uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4.6.0
       with:
         name: immortalwrt-ffmpeg-packages
-        path: bin/targets/armsr/armv8/packages/*.apk
+        path: bin/targets/armsr/armv8/packages/
