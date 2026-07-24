@@ -61,6 +61,14 @@ jobs:
           CONFIG_FFMPEG_MUXER_rtp=y
           CONFIG_FFMPEG_DEMUXER_h264=y
           CONFIG_FFMPEG_DEMUXER_hevc=y
+          CONFIG_PACKAGE_kmod-video-meson-vdec=y
+          CONFIG_PACKAGE_kmod-video-meson-venc=y
+          CONFIG_PACKAGE_kmod-video-meson-common=y
+          CONFIG_PACKAGE_kmod-media-controller=y
+          CONFIG_PACKAGE_kmod-v4l2=y
+          CONFIG_PACKAGE_kmod-v4l2-loopback=y
+          CONFIG_PACKAGE_kmod-video-codec-meson=y
+          CONFIG_PACKAGE_kmod-video-codec-meson-vdec=y
           EOF
 
           make defconfig
