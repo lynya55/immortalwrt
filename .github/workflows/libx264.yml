@@ -1,4 +1,4 @@
-name: Build FFmpeg with libx264
+name: Build FFmpeg with libx264 and HEVC
 
 on:
   workflow_dispatch:
@@ -26,41 +26,57 @@ jobs:
           tar --zstd -xvf sdk.tar.zst
           mv immortalwrt-sdk-* sdk
 
-      - name: Build libx264 and ffmpeg
+      - name: Build libx264 and FFmpeg
         run: |
           cd sdk
           ./scripts/feeds update -a
           ./scripts/feeds install libx264
           ./scripts/feeds install ffmpeg
-          
+
           cat > .config << 'EOF'
           CONFIG_TARGET_armsr=y
           CONFIG_TARGET_armsr_armv8=y
           CONFIG_TARGET_armsr_armv8_DEVICE_generic=y
           CONFIG_BUILD_PATENTED=y
           CONFIG_USE_APK=y
+
           CONFIG_PACKAGE_ffmpeg=y
           CONFIG_PACKAGE_libx264=y
           CONFIG_PACKAGE_libx264_asm=y
+          CONFIG_PACKAGE_libffmpeg-full=y
+
           CONFIG_FFMPEG_LIBX264=y
           CONFIG_FFMPEG_ENCODER_libx264=y
           CONFIG_FFMPEG_DECODER_h264=y
+          CONFIG_FFMPEG_DECODER_hevc=y
+          CONFIG_FFMPEG_PARSER_h264=y
+          CONFIG_FFMPEG_PARSER_hevc=y
+          CONFIG_FFMPEG_BSF_h264_mp4toannexb=y
+          CONFIG_FFMPEG_BSF_hevc_mp4toannexb=y
+
+          CONFIG_FFMPEG_PROTOCOL_rtsp=y
+          CONFIG_FFMPEG_DEMUXER_rtsp=y
+          CONFIG_FFMPEG_MUXER_rtsp=y
+          CONFIG_FFMPEG_DEMUXER_rtp=y
+          CONFIG_FFMPEG_MUXER_rtp=y
+          CONFIG_FFMPEG_DEMUXER_h264=y
+          CONFIG_FFMPEG_DEMUXER_hevc=y
           EOF
-          
+
           make defconfig
           echo "=== Building libx264 ==="
           make package/feeds/packages/libx264/compile V=s -j$(nproc)
-          echo "=== Building ffmpeg ==="
+          echo "=== Building FFmpeg ==="
           make package/feeds/packages/ffmpeg/compile V=s -j$(nproc)
 
       - name: List built packages
         run: |
           echo "=== Searching for libx264 ==="
           find sdk/bin/ -name "*libx264*" -type f
-          echo "=== Searching for ffmpeg ==="
+          echo "=== Searching for FFmpeg ==="
           find sdk/bin/ -name "*ffmpeg*" -type f
-          echo "=== All built packages in target dir ==="
-          ls -la sdk/bin/targets/armsr/armv8/packages/ || echo "Directory not found"
+          echo "=== All built packages in the known path ==="
+          ls -la /home/runner/work/immortalwrt/immortalwrt/sdk/bin/packages/aarch64_generic/packages/ || echo "Directory not found"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4.6.0
