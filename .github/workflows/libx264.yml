@@ -1,4 +1,4 @@
-name: Build FFmpeg with libx264 and HEVC
+name: Build FFmpeg with libx264, HEVC and Kernel Modules
 
 on:
   workflow_dispatch:
@@ -26,13 +26,14 @@ jobs:
           tar --zstd -xvf sdk.tar.zst
           mv immortalwrt-sdk-* sdk
 
-      - name: Build libx264 and FFmpeg
+      - name: Build Kernel, Modules, libx264 and FFmpeg
         run: |
           cd sdk
           ./scripts/feeds update -a
           ./scripts/feeds install libx264
           ./scripts/feeds install ffmpeg
 
+          # Генерируем полный конфиг для сборки ядра и модулей
           cat > .config << 'EOF'
           CONFIG_TARGET_armsr=y
           CONFIG_TARGET_armsr_armv8=y
@@ -40,27 +41,7 @@ jobs:
           CONFIG_BUILD_PATENTED=y
           CONFIG_USE_APK=y
 
-          CONFIG_PACKAGE_ffmpeg=y
-          CONFIG_PACKAGE_libx264=y
-          CONFIG_PACKAGE_libx264_asm=y
-          CONFIG_PACKAGE_libffmpeg-full=y
-
-          CONFIG_FFMPEG_LIBX264=y
-          CONFIG_FFMPEG_ENCODER_libx264=y
-          CONFIG_FFMPEG_DECODER_h264=y
-          CONFIG_FFMPEG_DECODER_hevc=y
-          CONFIG_FFMPEG_PARSER_h264=y
-          CONFIG_FFMPEG_PARSER_hevc=y
-          CONFIG_FFMPEG_BSF_h264_mp4toannexb=y
-          CONFIG_FFMPEG_BSF_hevc_mp4toannexb=y
-
-          CONFIG_FFMPEG_PROTOCOL_rtsp=y
-          CONFIG_FFMPEG_DEMUXER_rtsp=y
-          CONFIG_FFMPEG_MUXER_rtsp=y
-          CONFIG_FFMPEG_DEMUXER_rtp=y
-          CONFIG_FFMPEG_MUXER_rtp=y
-          CONFIG_FFMPEG_DEMUXER_h264=y
-          CONFIG_FFMPEG_DEMUXER_hevc=y
+          # Включаем все нужные kmod-пакеты
           CONFIG_PACKAGE_kmod-video-meson-vdec=y
           CONFIG_PACKAGE_kmod-video-meson-venc=y
           CONFIG_PACKAGE_kmod-video-meson-common=y
@@ -69,11 +50,46 @@ jobs:
           CONFIG_PACKAGE_kmod-v4l2-loopback=y
           CONFIG_PACKAGE_kmod-video-codec-meson=y
           CONFIG_PACKAGE_kmod-video-codec-meson-vdec=y
+
+          # Включаем FFmpeg и libx264
+          CONFIG_PACKAGE_ffmpeg=y
+          CONFIG_PACKAGE_libx264=y
+          CONFIG_PACKAGE_libx264_asm=y
+          CONFIG_PACKAGE_libffmpeg-full=y
+
+          # Настройки FFmpeg
+          CONFIG_FFMPEG_LIBX264=y
+          CONFIG_FFMPEG_ENCODER_libx264=y
+          CONFIG_FFMPEG_DECODER_h264=y
+          CONFIG_FFMPEG_DECODER_hevc=y
+          CONFIG_FFMPEG_PARSER_h264=y
+          CONFIG_FFMPEG_PARSER_hevc=y
+          CONFIG_FFMPEG_BSF_h264_mp4toannexb=y
+          CONFIG_FFMPEG_BSF_hevc_mp4toannexb=y
+          CONFIG_FFMPEG_PROTOCOL_rtsp=y
+          CONFIG_FFMPEG_DEMUXER_rtsp=y
+          CONFIG_FFMPEG_MUXER_rtsp=y
+          CONFIG_FFMPEG_DEMUXER_rtp=y
+          CONFIG_FFMPEG_MUXER_rtp=y
+          CONFIG_FFMPEG_DEMUXER_h264=y
+          CONFIG_FFMPEG_DEMUXER_hevc=y
           EOF
 
           make defconfig
+
+          # 1. Собираем ядро и модули (этот шаг критически важен)
+          echo "=== Building Kernel and Modules ==="
+          make kernel_menuconfig
+          make modules -j$(nproc)
+          # Копируем собранные модули в общую папку
+          mkdir -p bin/targets/armsr/armv8/packages/
+          cp -r staging_dir/target-aarch64_generic_musl/root-armsr/lib/modules/* bin/targets/armsr/armv8/packages/ 2>/dev/null || true
+
+          # 2. Собираем libx264
           echo "=== Building libx264 ==="
           make package/feeds/packages/libx264/compile V=s -j$(nproc)
+
+          # 3. Собираем FFmpeg
           echo "=== Building FFmpeg ==="
           make package/feeds/packages/ffmpeg/compile V=s -j$(nproc)
 
@@ -83,12 +99,18 @@ jobs:
           find sdk/bin/ -name "*libx264*" -type f
           echo "=== Searching for FFmpeg ==="
           find sdk/bin/ -name "*ffmpeg*" -type f
+          echo "=== Searching for kmod packages ==="
+          find sdk/bin/ -name "kmod-video-meson*" -type f
           echo "=== All built packages in the known path ==="
           ls -la /home/runner/work/immortalwrt/immortalwrt/sdk/bin/packages/aarch64_generic/packages/ || echo "Directory not found"
+          echo "=== All built packages in target path ==="
+          ls -la /home/runner/work/immortalwrt/immortalwrt/sdk/bin/targets/armsr/armv8/packages/ || echo "Directory not found"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4.6.0
         with:
-          name: immortalwrt-ffmpeg-packages
-          path: /home/runner/work/immortalwrt/immortalwrt/sdk/bin/packages/aarch64_generic/packages/*.apk
+          name: immortalwrt-ffmpeg-and-modules
+          path: |
+            /home/runner/work/immortalwrt/immortalwrt/sdk/bin/packages/aarch64_generic/packages/*.apk
+            /home/runner/work/immortalwrt/immortalwrt/sdk/bin/targets/armsr/armv8/packages/*.apk
           if-no-files-found: warn
