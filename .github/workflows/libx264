@@ -1,0 +1,32 @@
+name: Build libx264 only
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Download SDK
+        run: |
+          wget -O sdk.tar.zst https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/immortalwrt-sdk-armsr-armv8_gcc-14.4.0_musl.Linux-x86_64.tar.zst
+          tar --zstd -xvf sdk.tar.zst
+          mv immortalwrt-sdk-* sdk
+      - name: Build libx264
+        run: |
+          cd sdk
+          ./scripts/feeds update -a
+          ./scripts/feeds install libx264
+          echo "CONFIG_TARGET_armsr=y" > .config
+          echo "CONFIG_TARGET_armsr_armv8=y" >> .config
+          echo "CONFIG_TARGET_armsr_armv8_DEVICE_generic=y" >> .config
+          echo "CONFIG_BUILD_PATENTED=y" >> .config
+          echo "CONFIG_USE_APK=y" >> .config
+          echo "CONFIG_PACKAGE_libx264=y" >> .config
+          echo "CONFIG_PACKAGE_libx264_asm=y" >> .config
+          make defconfig
+          make package/feeds/packages/libx264/compile V=s -j$(nproc)
+      - name: Upload libx264
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: libx264-package
+          path: sdk/bin/packages/aarch64_generic/base/libx264*.apk
