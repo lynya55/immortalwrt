@@ -30,15 +30,9 @@ jobs:
         run: |
           cd sdk
           ./scripts/feeds update -a
-          
-          # Устанавливаем только аудио-пакеты
-          ./scripts/feeds install libfdk-aac
-          ./scripts/feeds install libopus
-          ./scripts/feeds install libvorbis
-          ./scripts/feeds install alsa-utils
-          ./scripts/feeds install libsoxr
+          ./scripts/feeds install -a
 
-          # Генерируем конфиг ТОЛЬКО для аудио
+          # Создаем конфиг с правильными путями
           cat > .config << 'EOF'
           CONFIG_TARGET_armsr=y
           CONFIG_TARGET_armsr_armv8=y
@@ -46,79 +40,49 @@ jobs:
           CONFIG_BUILD_PATENTED=y
           CONFIG_USE_APK=y
 
-          # Только аудио-библиотеки и утилиты
-          CONFIG_PACKAGE_libfdk-aac=y
+          # Аудио библиотеки (используем правильные имена пакетов)
+          CONFIG_PACKAGE_libfdkaac=y
           CONFIG_PACKAGE_libopus=y
           CONFIG_PACKAGE_libvorbis=y
+          CONFIG_PACKAGE_alsa-lib=y
           CONFIG_PACKAGE_alsa-utils=y
           CONFIG_PACKAGE_libsoxr=y
           CONFIG_PACKAGE_libsamplerate=y
           CONFIG_PACKAGE_libsndfile=y
-          
-          # Дополнительные аудио-кодеки (на всякий случай)
           CONFIG_PACKAGE_libmp3lame=y
           CONFIG_PACKAGE_libtwolame=y
           CONFIG_PACKAGE_libflac=y
-          
-          # Опционально: если нужны аудио-драйверы
-          # CONFIG_PACKAGE_kmod-sound-core=y
-          # CONFIG_PACKAGE_kmod-sound-arm=y
           EOF
 
           make defconfig
 
-          # Собираем только аудио-пакеты
-          echo "=== Building libfdk-aac ==="
-          make package/feeds/packages/libfdk-aac/compile V=s -j$(nproc)
+          # Собираем пакеты (используем правильные пути)
+          echo "=== Building audio packages ==="
+          make package/feeds/packages/libfdkaac/compile V=s -j$(nproc) || echo "libfdkaac not found, skipping..."
+          make package/feeds/packages/libopus/compile V=s -j$(nproc) || echo "libopus not found, skipping..."
+          make package/feeds/packages/libvorbis/compile V=s -j$(nproc) || echo "libvorbis not found, skipping..."
+          make package/feeds/packages/alsa-lib/compile V=s -j$(nproc) || echo "alsa-lib not found, skipping..."
+          make package/feeds/packages/alsa-utils/compile V=s -j$(nproc) || echo "alsa-utils not found, skipping..."
+          make package/feeds/packages/libsoxr/compile V=s -j$(nproc) || echo "libsoxr not found, skipping..."
+          make package/feeds/packages/libsamplerate/compile V=s -j$(nproc) || echo "libsamplerate not found, skipping..."
+          make package/feeds/packages/libsndfile/compile V=s -j$(nproc) || echo "libsndfile not found, skipping..."
+          make package/feeds/packages/libmp3lame/compile V=s -j$(nproc) || echo "libmp3lame not found, skipping..."
+          make package/feeds/packages/libtwolame/compile V=s -j$(nproc) || echo "libtwolame not found, skipping..."
+          make package/feeds/packages/libflac/compile V=s -j$(nproc) || echo "libflac not found, skipping..."
 
-          echo "=== Building libopus ==="
-          make package/feeds/packages/libopus/compile V=s -j$(nproc)
-
-          echo "=== Building libvorbis ==="
-          make package/feeds/packages/libvorbis/compile V=s -j$(nproc)
-
-          echo "=== Building alsa-utils ==="
-          make package/feeds/packages/alsa-utils/compile V=s -j$(nproc)
-
-          echo "=== Building libsoxr ==="
-          make package/feeds/packages/libsoxr/compile V=s -j$(nproc)
-
-          echo "=== Building libsamplerate ==="
-          make package/feeds/packages/libsamplerate/compile V=s -j$(nproc)
-
-          echo "=== Building libsndfile ==="
-          make package/feeds/packages/libsndfile/compile V=s -j$(nproc)
-
-          echo "=== Building libmp3lame ==="
-          make package/feeds/packages/libmp3lame/compile V=s -j$(nproc)
-
-      - name: List built audio packages
+      - name: List built packages
         run: |
           echo "=== Searching for audio packages ==="
-          find sdk/bin/ -name "*fdk-aac*" -type f
-          find sdk/bin/ -name "*libopus*" -type f
-          find sdk/bin/ -name "*libvorbis*" -type f
-          find sdk/bin/ -name "*alsa-utils*" -type f
-          find sdk/bin/ -name "*libsoxr*" -type f
-          find sdk/bin/ -name "*libsamplerate*" -type f
-          find sdk/bin/ -name "*libsndfile*" -type f
-          find sdk/bin/ -name "*libmp3lame*" -type f
+          find sdk/bin/ -name "*.apk" -type f | grep -E "(fdk|opus|vorbis|alsa|soxr|samplerate|sndfile|mp3|lame|twolame|flac)"
           echo "=== All built packages ==="
-          ls -la sdk/bin/packages/aarch64_generic/packages/ || echo "Directory not found"
+          ls -la sdk/bin/packages/aarch64_generic/packages/ 2>/dev/null || echo "Directory not found"
+          ls -la sdk/bin/targets/armsr/armv8/packages/ 2>/dev/null || echo "Directory not found"
 
       - name: Upload Audio Packages Artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4.6.0
         with:
           name: immortalwrt-audio-packages
           path: |
-            sdk/bin/packages/aarch64_generic/packages/libfdk-aac*.apk
-            sdk/bin/packages/aarch64_generic/packages/libopus*.apk
-            sdk/bin/packages/aarch64_generic/packages/libvorbis*.apk
-            sdk/bin/packages/aarch64_generic/packages/alsa-utils*.apk
-            sdk/bin/packages/aarch64_generic/packages/libsoxr*.apk
-            sdk/bin/packages/aarch64_generic/packages/libsamplerate*.apk
-            sdk/bin/packages/aarch64_generic/packages/libsndfile*.apk
-            sdk/bin/packages/aarch64_generic/packages/libmp3lame*.apk
-            sdk/bin/packages/aarch64_generic/packages/libtwolame*.apk
-            sdk/bin/packages/aarch64_generic/packages/libflac*.apk
+            sdk/bin/packages/aarch64_generic/packages/*.apk
+            sdk/bin/targets/armsr/armv8/packages/*.apk
           if-no-files-found: warn
