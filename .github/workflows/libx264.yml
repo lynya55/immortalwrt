@@ -1,4 +1,4 @@
-name: Build FFmpeg with Audio Support (Alternative)
+name: Build FFmpeg with libx264 and libfdk-aac
 
 on:
   workflow_dispatch:
@@ -14,9 +14,10 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential clang flex bison g++ gawk \
-            gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev \
-            rsync unzip zlib1g-dev file wget subversion fakeroot zstd
+          sudo apt-get install -y \
+            build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
+            gettext git libncurses-dev libssl-dev rsync unzip zlib1g-dev \
+            file wget subversion fakeroot libfakeroot zstd patch
 
       - name: Download SDK
         run: |
@@ -24,53 +25,86 @@ jobs:
           tar --zstd -xvf sdk.tar.zst
           mv immortalwrt-sdk-* sdk
 
-      - name: Build FFmpeg
+      - name: Create FFmpeg with fdk-aac support
         run: |
           cd sdk
           ./scripts/feeds update -a
           ./scripts/feeds install -a
-          
-          # Минимальный конфиг для ffmpeg с аудио
-          echo "CONFIG_TARGET_armsr=y
+
+          # Проверяем наличие пакета
+          echo "=== Searching for fdk-aac ==="
+          ./scripts/feeds search fdk-aac
+          ./scripts/feeds search fdk
+
+          # Создаем конфиг
+          cat > .config << 'EOF'
+          CONFIG_TARGET_armsr=y
           CONFIG_TARGET_armsr_armv8=y
           CONFIG_TARGET_armsr_armv8_DEVICE_generic=y
           CONFIG_BUILD_PATENTED=y
           CONFIG_USE_APK=y
-          
+
           CONFIG_PACKAGE_ffmpeg=y
           CONFIG_PACKAGE_libffmpeg-full=y
           CONFIG_PACKAGE_libx264=y
           CONFIG_PACKAGE_libx264_asm=y
-          CONFIG_PACKAGE_libfdk-aac=y
+          CONFIG_PACKAGE_fdk-aac=y
           CONFIG_PACKAGE_libopus=y
           CONFIG_PACKAGE_libmp3lame=y
-          
+
+          # ВИДЕО
           CONFIG_FFMPEG_LIBX264=y
           CONFIG_FFMPEG_ENCODER_libx264=y
           CONFIG_FFMPEG_DECODER_h264=y
           CONFIG_FFMPEG_DECODER_hevc=y
-          
+
+          # АУДИО - ОБЯЗАТЕЛЬНО указываем fdk-aac
           CONFIG_FFMPEG_LIBFDK_AAC=y
           CONFIG_FFMPEG_ENCODER_libfdk_aac=y
           CONFIG_FFMPEG_DECODER_aac=y
-          
+
           CONFIG_FFMPEG_LIBMP3LAME=y
           CONFIG_FFMPEG_ENCODER_libmp3lame=y
-          
+
           CONFIG_FFMPEG_LIBOPUS=y
           CONFIG_FFMPEG_ENCODER_libopus=y
-          
+
+          # Протоколы
           CONFIG_FFMPEG_PROTOCOL_rtsp=y
           CONFIG_FFMPEG_DEMUXER_rtsp=y
-          CONFIG_FFMPEG_MUXER_rtsp=y" > .config
-          
+          CONFIG_FFMPEG_MUXER_rtsp=y
+          EOF
+
           make defconfig
-          
-          # Собираем все пакеты разом
+
+          # Собираем сначала fdk-aac
+          echo "=== Building fdk-aac ==="
+          make package/feeds/packages/fdk-aac/compile V=s -j$(nproc)
+
+          # Собираем остальное
+          echo "=== Building libopus ==="
+          make package/feeds/packages/libopus/compile V=s -j$(nproc)
+
+          echo "=== Building libmp3lame ==="
+          make package/feeds/packages/libmp3lame/compile V=s -j$(nproc)
+
+          echo "=== Building libx264 ==="
+          make package/feeds/packages/libx264/compile V=s -j$(nproc)
+
+          echo "=== Building FFmpeg ==="
           make package/feeds/packages/ffmpeg/compile V=s -j$(nproc)
+
+      - name: List built packages
+        run: |
+          echo "=== FFmpeg packages ==="
+          find sdk/bin/ -name "*.apk" -type f | grep -E "(ffmpeg|fdk-aac|x264|opus)"
+          ls -la sdk/bin/targets/armsr/armv8/packages/ 2>/dev/null || echo "Not found"
 
       - name: Upload
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
-          name: ffmpeg-packages
-          path: sdk/bin/**/*.apk
+          name: ffmpeg-with-fdk
+          path: |
+            sdk/bin/targets/armsr/armv8/packages/*.apk
+            sdk/bin/packages/aarch64_generic/packages/*.apk
+          if-no-files-found: warn
