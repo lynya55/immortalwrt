@@ -1,4 +1,4 @@
-name: Build FFmpeg with libx264, libfdk-aac and audio support
+name: Build FFmpeg with Audio Support (Alternative)
 
 on:
   workflow_dispatch:
@@ -9,131 +9,68 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Install Build Dependencies
+      - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
-            gettext git libncurses-dev libssl-dev rsync unzip zlib1g-dev \
-            file wget subversion fakeroot libfakeroot zstd
+          sudo apt-get install -y build-essential clang flex bison g++ gawk \
+            gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev \
+            rsync unzip zlib1g-dev file wget subversion fakeroot zstd
 
       - name: Download SDK
         run: |
-          SDK_URL="https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/immortalwrt-sdk-armsr-armv8_gcc-14.4.0_musl.Linux-x86_64.tar.zst"
-          wget -O sdk.tar.zst $SDK_URL
+          wget -O sdk.tar.zst https://downloads.immortalwrt.org/snapshots/targets/armsr/armv8/immortalwrt-sdk-armsr-armv8_gcc-14.4.0_musl.Linux-x86_64.tar.zst
           tar --zstd -xvf sdk.tar.zst
           mv immortalwrt-sdk-* sdk
 
-      - name: Build FFmpeg with Full Audio Support
+      - name: Build FFmpeg
         run: |
           cd sdk
           ./scripts/feeds update -a
           ./scripts/feeds install -a
-
-          # Проверяем доступные пакеты
-          echo "=== Available audio packages ==="
-          ./scripts/feeds search aac
-          ./scripts/feeds search fdk
-          ./scripts/feeds search opus
-          ./scripts/feeds search lame
-
-          # Полный конфиг с аудио-поддержкой
-          cat > .config << 'EOF'
-          CONFIG_TARGET_armsr=y
+          
+          # Минимальный конфиг для ffmpeg с аудио
+          echo "CONFIG_TARGET_armsr=y
           CONFIG_TARGET_armsr_armv8=y
           CONFIG_TARGET_armsr_armv8_DEVICE_generic=y
           CONFIG_BUILD_PATENTED=y
           CONFIG_USE_APK=y
-
-          # Основные пакеты
+          
           CONFIG_PACKAGE_ffmpeg=y
           CONFIG_PACKAGE_libffmpeg-full=y
           CONFIG_PACKAGE_libx264=y
           CONFIG_PACKAGE_libx264_asm=y
-          
-          # Аудио библиотеки (правильные имена)
           CONFIG_PACKAGE_libfdk-aac=y
           CONFIG_PACKAGE_libopus=y
-          CONFIG_PACKAGE_libvorbis=y
           CONFIG_PACKAGE_libmp3lame=y
-          CONFIG_PACKAGE_libsoxr=y
-          CONFIG_PACKAGE_libsamplerate=y
-          CONFIG_PACKAGE_libsndfile=y
-
-          # Настройки FFmpeg - ВИДЕО
+          
           CONFIG_FFMPEG_LIBX264=y
           CONFIG_FFMPEG_ENCODER_libx264=y
           CONFIG_FFMPEG_DECODER_h264=y
           CONFIG_FFMPEG_DECODER_hevc=y
-          CONFIG_FFMPEG_PARSER_h264=y
-          CONFIG_FFMPEG_PARSER_hevc=y
-          CONFIG_FFMPEG_BSF_h264_mp4toannexb=y
-          CONFIG_FFMPEG_BSF_hevc_mp4toannexb=y
-
-          # Настройки FFmpeg - АУДИО
+          
           CONFIG_FFMPEG_LIBFDK_AAC=y
           CONFIG_FFMPEG_ENCODER_libfdk_aac=y
           CONFIG_FFMPEG_DECODER_aac=y
-          CONFIG_FFMPEG_PARSER_aac=y
-          CONFIG_FFMPEG_BSF_aac_adtstoasc=y
           
           CONFIG_FFMPEG_LIBMP3LAME=y
           CONFIG_FFMPEG_ENCODER_libmp3lame=y
-          CONFIG_FFMPEG_DECODER_mp3=y
-          CONFIG_FFMPEG_PARSER_mp3=y
           
           CONFIG_FFMPEG_LIBOPUS=y
           CONFIG_FFMPEG_ENCODER_libopus=y
-          CONFIG_FFMPEG_DECODER_opus=y
-          CONFIG_FFMPEG_PARSER_opus=y
-
-          # Протоколы
+          
           CONFIG_FFMPEG_PROTOCOL_rtsp=y
           CONFIG_FFMPEG_DEMUXER_rtsp=y
-          CONFIG_FFMPEG_MUXER_rtsp=y
-          CONFIG_FFMPEG_DEMUXER_rtp=y
-          CONFIG_FFMPEG_MUXER_rtp=y
-          CONFIG_FFMPEG_DEMUXER_h264=y
-          CONFIG_FFMPEG_DEMUXER_hevc=y
-          CONFIG_FFMPEG_DEMUXER_aac=y
-          CONFIG_FFMPEG_MUXER_aac=y
-          EOF
-
+          CONFIG_FFMPEG_MUXER_rtsp=y" > .config
+          
           make defconfig
-
-          # Собираем аудио-библиотеки (правильные пути)
-          echo "=== Building libfdk-aac ==="
-          make package/feeds/packages/libfdk-aac/compile V=s -j$(nproc) || echo "libfdk-aac not found, trying alternative..."
-
-          echo "=== Building libopus ==="
-          make package/feeds/packages/libopus/compile V=s -j$(nproc) || echo "libopus not found"
-
-          echo "=== Building libmp3lame ==="
-          make package/feeds/packages/libmp3lame/compile V=s -j$(nproc) || echo "libmp3lame not found"
-
-          # Собираем libx264
-          echo "=== Building libx264 ==="
-          make package/feeds/packages/libx264/compile V=s -j$(nproc)
-
-          # Собираем FFmpeg
-          echo "=== Building FFmpeg ==="
+          
+          # Собираем все пакеты разом
           make package/feeds/packages/ffmpeg/compile V=s -j$(nproc)
 
-      - name: List built packages
-        run: |
-          echo "=== Built packages ==="
-          find sdk/bin/ -name "*.apk" -type f
-          echo "=== All packages in directory ==="
-          ls -la sdk/bin/packages/aarch64_generic/packages/ 2>/dev/null || echo "Directory not found"
-          ls -la sdk/bin/targets/armsr/armv8/packages/ 2>/dev/null || echo "Directory not found"
-
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4.6.0
+      - name: Upload
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
-          name: immortalwrt-ffmpeg-with-audio
-          path: |
-            sdk/bin/packages/aarch64_generic/packages/*.apk
-            sdk/bin/targets/armsr/armv8/packages/*.apk
-          if-no-files-found: warn
+          name: ffmpeg-packages
+          path: sdk/bin/**/*.apk
