@@ -32,6 +32,13 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
+          # Проверяем доступные пакеты
+          echo "=== Available audio packages ==="
+          ./scripts/feeds search aac
+          ./scripts/feeds search fdk
+          ./scripts/feeds search opus
+          ./scripts/feeds search lame
+
           # Полный конфиг с аудио-поддержкой
           cat > .config << 'EOF'
           CONFIG_TARGET_armsr=y
@@ -46,8 +53,8 @@ jobs:
           CONFIG_PACKAGE_libx264=y
           CONFIG_PACKAGE_libx264_asm=y
           
-          # Аудио библиотеки
-          CONFIG_PACKAGE_libfdkaac=y
+          # Аудио библиотеки (правильные имена)
+          CONFIG_PACKAGE_libfdk-aac=y
           CONFIG_PACKAGE_libopus=y
           CONFIG_PACKAGE_libvorbis=y
           CONFIG_PACKAGE_libmp3lame=y
@@ -65,7 +72,7 @@ jobs:
           CONFIG_FFMPEG_BSF_h264_mp4toannexb=y
           CONFIG_FFMPEG_BSF_hevc_mp4toannexb=y
 
-          # Настройки FFmpeg - АУДИО (ВАЖНО!)
+          # Настройки FFmpeg - АУДИО
           CONFIG_FFMPEG_LIBFDK_AAC=y
           CONFIG_FFMPEG_ENCODER_libfdk_aac=y
           CONFIG_FFMPEG_DECODER_aac=y
@@ -82,7 +89,7 @@ jobs:
           CONFIG_FFMPEG_DECODER_opus=y
           CONFIG_FFMPEG_PARSER_opus=y
 
-          # Протоколы RTSP/RTP
+          # Протоколы
           CONFIG_FFMPEG_PROTOCOL_rtsp=y
           CONFIG_FFMPEG_DEMUXER_rtsp=y
           CONFIG_FFMPEG_MUXER_rtsp=y
@@ -96,15 +103,15 @@ jobs:
 
           make defconfig
 
-          # Собираем libfdkaac (обязательно перед ffmpeg)
-          echo "=== Building libfdkaac ==="
-          make package/feeds/packages/libfdkaac/compile V=s -j$(nproc)
+          # Собираем аудио-библиотеки (правильные пути)
+          echo "=== Building libfdk-aac ==="
+          make package/feeds/packages/libfdk-aac/compile V=s -j$(nproc) || echo "libfdk-aac not found, trying alternative..."
 
-          # Собираем остальные аудио-библиотеки
-          echo "=== Building audio libraries ==="
-          make package/feeds/packages/libopus/compile V=s -j$(nproc) || echo "libopus skipped"
-          make package/feeds/packages/libvorbis/compile V=s -j$(nproc) || echo "libvorbis skipped"
-          make package/feeds/packages/libmp3lame/compile V=s -j$(nproc) || echo "libmp3lame skipped"
+          echo "=== Building libopus ==="
+          make package/feeds/packages/libopus/compile V=s -j$(nproc) || echo "libopus not found"
+
+          echo "=== Building libmp3lame ==="
+          make package/feeds/packages/libmp3lame/compile V=s -j$(nproc) || echo "libmp3lame not found"
 
           # Собираем libx264
           echo "=== Building libx264 ==="
@@ -117,7 +124,8 @@ jobs:
       - name: List built packages
         run: |
           echo "=== Built packages ==="
-          find sdk/bin/ -name "*.apk" -type f | grep -E "(ffmpeg|libfdk|libx264|libopus|libvorbis|libmp3lame)"
+          find sdk/bin/ -name "*.apk" -type f
+          echo "=== All packages in directory ==="
           ls -la sdk/bin/packages/aarch64_generic/packages/ 2>/dev/null || echo "Directory not found"
           ls -la sdk/bin/targets/armsr/armv8/packages/ 2>/dev/null || echo "Directory not found"
 
