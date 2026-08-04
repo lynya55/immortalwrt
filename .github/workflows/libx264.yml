@@ -1,4 +1,4 @@
-name: Build FFmpeg with libx264, HEVC and Kernel Modules
+name: Build FFmpeg with libx264, libfdk-aac and audio support
 
 on:
   workflow_dispatch:
@@ -26,14 +26,13 @@ jobs:
           tar --zstd -xvf sdk.tar.zst
           mv immortalwrt-sdk-* sdk
 
-      - name: Build Kernel Modules and Packages
+      - name: Build FFmpeg with Full Audio Support
         run: |
           cd sdk
           ./scripts/feeds update -a
-          ./scripts/feeds install libx264
-          ./scripts/feeds install ffmpeg
+          ./scripts/feeds install -a
 
-          # Генерируем конфиг для сборки модулей и пакетов
+          # Полный конфиг с аудио-поддержкой
           cat > .config << 'EOF'
           CONFIG_TARGET_armsr=y
           CONFIG_TARGET_armsr_armv8=y
@@ -41,34 +40,22 @@ jobs:
           CONFIG_BUILD_PATENTED=y
           CONFIG_USE_APK=y
 
-          # Включаем все нужные kmod-пакеты
-          CONFIG_PACKAGE_kmod-video-meson-vdec=y
-          CONFIG_PACKAGE_kmod-video-meson-venc=y
-          CONFIG_PACKAGE_kmod-video-meson-common=y
-          CONFIG_PACKAGE_kmod-media-controller=y
-          CONFIG_PACKAGE_kmod-v4l2=y
-          CONFIG_PACKAGE_kmod-v4l2-loopback=y
-          CONFIG_PACKAGE_kmod-video-codec-meson=y
-          CONFIG_PACKAGE_kmod-video-codec-meson-vdec=y
-          CONFIG_PACKAGE_libfdk-aac=y
-          CONFIG_PACKAGE_libopus=y
-          CONFIG_PACKAGE_libvorbis=y
-          CONFIG_FFMPEG_LIBFDK_AAC=y
-          CONFIG_FFMPEG_ENCODER_libfdk_aac=y
-          CONFIG_FFMPEG_DECODER_aac=y
-          CONFIG_FFMPEG_PARSER_aac=y
-          CONFIG_FFMPEG_BSF_aac_adtstoasc=y
-          CONFIG_FFMPEG_DEMUXER_mp3=y
-          CONFIG_FFMPEG_DEMUXER_wav=y
-          CONFIG_FFMPEG_PARSER_mp3=y
-
-          # Включаем FFmpeg и libx264
+          # Основные пакеты
           CONFIG_PACKAGE_ffmpeg=y
+          CONFIG_PACKAGE_libffmpeg-full=y
           CONFIG_PACKAGE_libx264=y
           CONFIG_PACKAGE_libx264_asm=y
-          CONFIG_PACKAGE_libffmpeg-full=y
+          
+          # Аудио библиотеки
+          CONFIG_PACKAGE_libfdkaac=y
+          CONFIG_PACKAGE_libopus=y
+          CONFIG_PACKAGE_libvorbis=y
+          CONFIG_PACKAGE_libmp3lame=y
+          CONFIG_PACKAGE_libsoxr=y
+          CONFIG_PACKAGE_libsamplerate=y
+          CONFIG_PACKAGE_libsndfile=y
 
-          # Настройки FFmpeg
+          # Настройки FFmpeg - ВИДЕО
           CONFIG_FFMPEG_LIBX264=y
           CONFIG_FFMPEG_ENCODER_libx264=y
           CONFIG_FFMPEG_DECODER_h264=y
@@ -77,6 +64,25 @@ jobs:
           CONFIG_FFMPEG_PARSER_hevc=y
           CONFIG_FFMPEG_BSF_h264_mp4toannexb=y
           CONFIG_FFMPEG_BSF_hevc_mp4toannexb=y
+
+          # Настройки FFmpeg - АУДИО (ВАЖНО!)
+          CONFIG_FFMPEG_LIBFDK_AAC=y
+          CONFIG_FFMPEG_ENCODER_libfdk_aac=y
+          CONFIG_FFMPEG_DECODER_aac=y
+          CONFIG_FFMPEG_PARSER_aac=y
+          CONFIG_FFMPEG_BSF_aac_adtstoasc=y
+          
+          CONFIG_FFMPEG_LIBMP3LAME=y
+          CONFIG_FFMPEG_ENCODER_libmp3lame=y
+          CONFIG_FFMPEG_DECODER_mp3=y
+          CONFIG_FFMPEG_PARSER_mp3=y
+          
+          CONFIG_FFMPEG_LIBOPUS=y
+          CONFIG_FFMPEG_ENCODER_libopus=y
+          CONFIG_FFMPEG_DECODER_opus=y
+          CONFIG_FFMPEG_PARSER_opus=y
+
+          # Протоколы RTSP/RTP
           CONFIG_FFMPEG_PROTOCOL_rtsp=y
           CONFIG_FFMPEG_DEMUXER_rtsp=y
           CONFIG_FFMPEG_MUXER_rtsp=y
@@ -84,13 +90,21 @@ jobs:
           CONFIG_FFMPEG_MUXER_rtp=y
           CONFIG_FFMPEG_DEMUXER_h264=y
           CONFIG_FFMPEG_DEMUXER_hevc=y
+          CONFIG_FFMPEG_DEMUXER_aac=y
+          CONFIG_FFMPEG_MUXER_aac=y
           EOF
 
           make defconfig
 
-          # Собираем модули ядра через стандартную систему пакетов
-          echo "=== Building kernel modules ==="
-          make package/feeds/packages/linux/compile V=s -j$(nproc)
+          # Собираем libfdkaac (обязательно перед ffmpeg)
+          echo "=== Building libfdkaac ==="
+          make package/feeds/packages/libfdkaac/compile V=s -j$(nproc)
+
+          # Собираем остальные аудио-библиотеки
+          echo "=== Building audio libraries ==="
+          make package/feeds/packages/libopus/compile V=s -j$(nproc) || echo "libopus skipped"
+          make package/feeds/packages/libvorbis/compile V=s -j$(nproc) || echo "libvorbis skipped"
+          make package/feeds/packages/libmp3lame/compile V=s -j$(nproc) || echo "libmp3lame skipped"
 
           # Собираем libx264
           echo "=== Building libx264 ==="
@@ -102,20 +116,16 @@ jobs:
 
       - name: List built packages
         run: |
-          echo "=== Searching for libx264 ==="
-          find sdk/bin/ -name "*libx264*" -type f
-          echo "=== Searching for FFmpeg ==="
-          find sdk/bin/ -name "*ffmpeg*" -type f
-          echo "=== Searching for kmod packages ==="
-          find sdk/bin/ -name "kmod-*" -type f
-          echo "=== All built packages in the known path ==="
-          ls -la /home/runner/work/immortalwrt/immortalwrt/sdk/bin/packages/aarch64_generic/packages/ || echo "Directory not found"
+          echo "=== Built packages ==="
+          find sdk/bin/ -name "*.apk" -type f | grep -E "(ffmpeg|libfdk|libx264|libopus|libvorbis|libmp3lame)"
+          ls -la sdk/bin/packages/aarch64_generic/packages/ 2>/dev/null || echo "Directory not found"
+          ls -la sdk/bin/targets/armsr/armv8/packages/ 2>/dev/null || echo "Directory not found"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4.6.0
         with:
-          name: immortalwrt-ffmpeg-and-modules
+          name: immortalwrt-ffmpeg-with-audio
           path: |
-            /home/runner/work/immortalwrt/immortalwrt/sdk/bin/packages/aarch64_generic/packages/*.apk
-            /home/runner/work/immortalwrt/immortalwrt/sdk/bin/targets/armsr/armv8/packages/*.apk
+            sdk/bin/packages/aarch64_generic/packages/*.apk
+            sdk/bin/targets/armsr/armv8/packages/*.apk
           if-no-files-found: warn
